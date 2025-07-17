@@ -1,8 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Monitor, Smartphone, Tablet, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useState } from 'react';
 
 interface PreviewPanelProps {
   html: string;
@@ -27,34 +26,37 @@ export function PreviewPanel({ html, css }: PreviewPanelProps) {
 
     try {
       setError(null);
-      
-      // Create complete HTML document with embedded CSS
-      const fullHtml = html.includes('<style>') || html.includes('<link') 
-        ? html 
-        : html.replace(
-            '<head>',
-            `<head>
-              <style>${css}</style>`
-          );
 
-      // Validate basic HTML structure
-      if (!fullHtml.includes('<html') && !fullHtml.includes('<body')) {
-        throw new Error('Invalid HTML structure. Please include proper HTML tags.');
+      let processedHtml = html;
+      // If the provided HTML is a fragment, wrap it for preview.
+      if (!/<\/body>/i.test(processedHtml)) {
+        processedHtml = `<body>${processedHtml}</body>`;
       }
+      if (!/<\/head>/i.test(processedHtml)) {
+         processedHtml = `<head><meta charset="UTF-8"><title>Preview</title></head>${processedHtml}`;
+      }
+
+      // Correctly inject the CSS from the editor right before the closing </head> tag.
+      // This is case-insensitive and works reliably.
+      const fullHtml = processedHtml.replace(
+        /<\/head>/i,
+        `<style>${css}</style></head>`
+      );
 
       const iframe = iframeRef.current;
       const doc = iframe.contentDocument || iframe.contentWindow?.document;
-      
+
       if (doc) {
         doc.open();
         doc.write(fullHtml);
         doc.close();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Preview error occurred');
+      const errorMessage = err instanceof Error ? err.message : 'An unknown preview error occurred';
+      setError(errorMessage);
       console.error('Preview error:', err);
     }
-  }, [html, css]);
+  }, [html, css, device]);
 
   const getDeviceIcon = (deviceType: DeviceType) => {
     switch (deviceType) {
@@ -86,37 +88,29 @@ export function PreviewPanel({ html, css }: PreviewPanelProps) {
       </div>
 
       {/* Preview Container */}
-      <Card className="card-gradient flex-1 p-4">
-        <div className="w-full h-full flex items-center justify-center">
-          {error ? (
-            <div className="text-center p-8">
-              <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-destructive mb-2">Preview Error</h3>
-              <p className="text-muted-foreground">{error}</p>
-            </div>
-          ) : (
-            <div 
-              className="flex items-center justify-center w-full h-full"
-              style={{ 
-                maxWidth: deviceDimensions[device].width,
-                maxHeight: deviceDimensions[device].height 
-              }}
-            >
-              <iframe
-                ref={iframeRef}
-                className="preview-iframe w-full h-full border-0 rounded-lg"
-                style={{
-                  width: device === 'desktop' ? '100%' : deviceDimensions[device].width,
-                  height: device === 'desktop' ? '100%' : deviceDimensions[device].height,
-                  maxWidth: '100%',
-                  maxHeight: '100%'
-                }}
-                sandbox="allow-scripts allow-same-origin"
-                title="HTML/CSS Preview"
-              />
-            </div>
-          )}
-        </div>
+      <Card className="card-gradient flex-1 p-4 flex items-center justify-center">
+        {error ? (
+          <div className="text-center p-8">
+            <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-destructive mb-2">Preview Error</h3>
+            <p className="text-muted-foreground">{error}</p>
+          </div>
+        ) : (
+          <div
+            className="flex items-center justify-center w-full h-full transition-all duration-300 ease-in-out"
+            style={{
+              maxWidth: deviceDimensions[device].width,
+              maxHeight: deviceDimensions[device].height
+            }}
+          >
+            <iframe
+              ref={iframeRef}
+              className="preview-iframe w-full h-full border-0 rounded-lg bg-white shadow-lg"
+              sandbox="allow-scripts allow-same-origin"
+              title="HTML/CSS Preview"
+            />
+          </div>
+        )}
       </Card>
 
       {/* Device Info */}
