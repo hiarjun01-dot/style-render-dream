@@ -4,6 +4,8 @@ import { Monitor, Smartphone, Tablet, AlertCircle, Download, Image, FileImage } 
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import html2canvas from 'html2canvas';
+// NEW: Import the GIF library
+import GIF from 'gif.js';
 
 interface PreviewPanelProps {
   html: string;
@@ -11,6 +13,9 @@ interface PreviewPanelProps {
 }
 
 type DeviceType = 'desktop' | 'tablet' | 'mobile';
+
+// NEW: Helper function to introduce delays between captures
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export function PreviewPanel({ html, css }: PreviewPanelProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -32,19 +37,18 @@ export function PreviewPanel({ html, css }: PreviewPanelProps) {
       setError(null);
 
       let processedHtml = html;
-      // If the provided HTML is a fragment, wrap it for preview.
       if (!/<\/body>/i.test(processedHtml)) {
         processedHtml = `<body>${processedHtml}</body>`;
       }
       if (!/<\/head>/i.test(processedHtml)) {
-         processedHtml = `<head><meta charset="UTF-8"><title>Preview</title></head>${processedHtml}`;
+          processedHtml = `<head><meta charset="UTF-8"><title>Preview</title></head>${processedHtml}`;
       }
 
-      // Correctly inject the CSS from the editor right before the closing </head> tag.
-      // This is case-insensitive and works reliably.
+      // This script path is crucial for gif.js to work.
+      // Ensure 'gif.worker.js' from the 'gif.js' package is in your public/static assets folder.
       const fullHtml = processedHtml.replace(
         /<\/head>/i,
-        `<style>${css}</style></head>`
+        `<style>${css}</style><script src="/gif.worker.js"></script></head>`
       );
 
       const iframe = iframeRef.current;
@@ -74,66 +78,67 @@ export function PreviewPanel({ html, css }: PreviewPanelProps) {
     if (!iframeRef.current) throw new Error('Preview not available');
     
     const iframe = iframeRef.current;
-    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
     
-    if (!iframeDoc || !iframeDoc.body) {
+    // Use the iframe's contentWindow's body for html2canvas
+    const iframeBody = iframe.contentWindow?.document.body;
+
+    if (!iframeBody) {
       throw new Error('No content to capture');
     }
 
-    // Create a temporary container with the iframe content
-    const tempDiv = document.createElement('div');
-    tempDiv.style.position = 'absolute';
-    tempDiv.style.left = '-9999px';
-    tempDiv.style.top = '-9999px';
-    tempDiv.style.width = iframe.offsetWidth + 'px';
-    tempDiv.style.height = iframe.offsetHeight + 'px';
-    tempDiv.innerHTML = iframeDoc.documentElement.outerHTML;
+    // Ensure all images inside the iframe are loaded before capturing
+    const images = Array.from(iframe.contentWindow?.document.images || []);
+    const promises = images.map(image => {
+        if (image.complete) return Promise.resolve();
+        return new Promise<void>(resolve => {
+            image.onload = () => resolve();
+            image.onerror = () => resolve(); // Resolve even on error to not block the process
+        });
+    });
+    await Promise.all(promises);
     
-    document.body.appendChild(tempDiv);
-    
-    try {
-      const canvas = await html2canvas(tempDiv, {
-        width: iframe.offsetWidth,
-        height: iframe.offsetHeight,
-        backgroundColor: '#ffffff',
-        scale: 2 // Higher quality
-      });
-      
-      return canvas;
-    } finally {
-      document.body.removeChild(tempDiv);
-    }
+    // We can directly capture the iframe's body if cross-origin policies are aligned.
+    // The sandbox="allow-same-origin" helps here.
+    return await html2canvas(iframeBody, {
+      width: iframe.offsetWidth,
+      height: iframe.offsetHeight,
+      backgroundColor: '#ffffff',
+      scale: 2, // Higher quality capture
+      useCORS: true, // Allow loading of cross-origin images
+      logging: false,
+    });
   };
 
   const downloadImage = async (format: 'png' | 'jpg') => {
+    setIsDownloading(format);
     try {
-      setIsDownloading(format);
       const canvas = await captureIframeContent();
-      
       const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
-      const quality = format === 'jpg' ? 0.9 : undefined;
+      const quality = format === 'jpg' ? 0.92 : undefined;
       
       canvas.toBlob((blob) => {
-        if (!blob) throw new Error('Failed to generate image');
-        
+        if (!blob) {
+            throw new Error('Failed to generate image blob.');
+        }
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `preview.${format}`;
+        a.download = `capture.${format}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         
         toast({
-          title: "Download Complete!",
-          description: `Preview downloaded as ${format.toUpperCase()} file.`,
+          title: "Download Starting!",
+          description: `Your preview has been saved as a ${format.toUpperCase()} file.`,
         });
       }, mimeType, quality);
+
     } catch (err) {
       toast({
         title: "Download Failed",
-        description: err instanceof Error ? err.message : 'Failed to download image',
+        description: err instanceof Error ? err.message : 'Could not download the image.',
         variant: "destructive"
       });
     } finally {
@@ -141,41 +146,97 @@ export function PreviewPanel({ html, css }: PreviewPanelProps) {
     }
   };
 
+  // --- MODIFIED SECTION: Animated GIF Download ---
   const downloadGIF = async () => {
+    if (!iframeRef.current) {
+        toast({ title: "Error", description: "Preview not available.", variant: "destructive" });
+        return;
+    }
+    setIsDownloading('gif');
+    
+    const iframe = iframeRef.current;
+    const iframeDoc = iframe.contentDocument;
+
+    if (!iframeDoc) {
+        toast({ title: "Error", description: "Could not access preview content.", variant: "destructive" });
+        setIsDownloading(null);
+        return;
+    }
+
+    // This logic assumes your carousel has a container with class 'carousel'
+    // and its direct children are the slides.
+    const carouselContainer = iframeDoc.querySelector('.carousel');
+    if (!carouselContainer) {
+        toast({ title: "GIF Failed", description: "A container with class '.carousel' was not found.", variant: "destructive" });
+        setIsDownloading(null);
+        return;
+    }
+    
+    const slides = Array.from(carouselContainer.children) as HTMLElement[];
+    if (slides.length < 2) {
+        toast({ title: "GIF Failed", description: "At least two slides are needed to create a GIF.", variant: "destructive" });
+        setIsDownloading(null);
+        return;
+    }
+
     try {
-      setIsDownloading('gif');
-      
-      // Simple GIF implementation - capture current state
-      // For a true animated GIF of carousel slides, you'd need additional carousel state
-      const canvas = await captureIframeContent();
-      
-      canvas.toBlob((blob) => {
-        if (!blob) throw new Error('Failed to generate GIF');
-        
-        // Note: This creates a static image as GIF. For true animation,
-        // you'd need a GIF encoding library like gif.js
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'preview.gif';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
         toast({
-          title: "Download Complete!",
-          description: "Preview downloaded as GIF file.",
+            title: "Generating GIF...",
+            description: `Capturing ${slides.length} slides. Please wait.`,
         });
-      }, 'image/png'); // Using PNG format for better quality
+
+        // Initialize gif.js library
+        const gif = new GIF({
+            workers: 2,
+            quality: 10, // Lower is better
+            width: iframe.offsetWidth,
+            height: iframe.offsetHeight,
+        });
+        
+        const originalSlideStyles = slides.map(slide => slide.style.display);
+        
+        // Loop through slides, capture each one, and add it as a frame
+        for (let i = 0; i < slides.length; i++) {
+            // Show only the current slide
+            slides.forEach(s => s.style.display = 'none');
+            slides[i].style.display = 'block';
+
+            await sleep(100); // Wait for render
+
+            const canvas = await captureIframeContent();
+            gif.addFrame(canvas, { delay: 1500 }); // 1.5 seconds per slide
+        }
+
+        // Restore original slide visibility
+        slides.forEach((slide, index) => {
+            slide.style.display = originalSlideStyles[index] || '';
+        });
+
+        // Finalize the GIF and trigger download
+        gif.on('finished', (blob) => {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'carousel-animation.gif';
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            setIsDownloading(null);
+            toast({
+                title: "Download Complete!",
+                description: "Your animated GIF has been saved.",
+            });
+        });
+
+        gif.render();
+
     } catch (err) {
-      toast({
-        title: "Download Failed",
-        description: err instanceof Error ? err.message : 'Failed to download GIF',
-        variant: "destructive"
-      });
-    } finally {
-      setIsDownloading(null);
+        toast({
+            title: "GIF Generation Failed",
+            description: err instanceof Error ? err.message : 'An unknown error occurred.',
+            variant: "destructive"
+        });
+        setIsDownloading(null);
     }
   };
 
@@ -228,55 +289,23 @@ export function PreviewPanel({ html, css }: PreviewPanelProps) {
 
       {/* Download Options */}
       <div className="mt-4 flex flex-wrap gap-2 justify-center">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => downloadImage('png')}
-          disabled={!!isDownloading || !!error}
-          className="flex items-center gap-2"
-        >
-          {isDownloading === 'png' ? (
-            <div className="w-4 h-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          ) : (
-            <Image className="w-4 h-4" />
-          )}
+        <Button variant="outline" size="sm" onClick={() => downloadImage('png')} disabled={!!isDownloading || !!error} className="flex items-center gap-2">
+          {isDownloading === 'png' ? <div className="w-4 h-4 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <Image className="w-4 h-4" />}
           Download PNG
         </Button>
-        
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => downloadImage('jpg')}
-          disabled={!!isDownloading || !!error}
-          className="flex items-center gap-2"
-        >
-          {isDownloading === 'jpg' ? (
-            <div className="w-4 h-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          ) : (
-            <FileImage className="w-4 h-4" />
-          )}
+        <Button variant="outline" size="sm" onClick={() => downloadImage('jpg')} disabled={!!isDownloading || !!error} className="flex items-center gap-2">
+          {isDownloading === 'jpg' ? <div className="w-4 h-4 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <FileImage className="w-4 h-4" />}
           Download JPG
         </Button>
-        
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={downloadGIF}
-          disabled={!!isDownloading || !!error}
-          className="flex items-center gap-2"
-        >
-          {isDownloading === 'gif' ? (
-            <div className="w-4 h-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          ) : (
-            <Download className="w-4 h-4" />
-          )}
+        <Button variant="outline" size="sm" onClick={downloadGIF} disabled={!!isDownloading || !!error} className="flex items-center gap-2">
+          {isDownloading === 'gif' ? <div className="w-4 h-4 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <Download className="w-4 h-4" />}
           Download GIF
         </Button>
       </div>
 
       {/* Device Info */}
       <div className="mt-2 text-xs text-muted-foreground text-center">
-        Viewing in {device} mode ({deviceDimensions[device].width} × {deviceDimensions[device].height})
+        Viewing in {device} mode
       </div>
     </div>
   );
