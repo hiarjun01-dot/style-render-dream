@@ -2,57 +2,62 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Modern Code Editor Design System */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Modern tech-focused color palette */
+    --background: 210 11% 15%;
+    --foreground: 213 31% 91%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 217 19% 18%;
+    --card-foreground: 213 31% 91%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 217 19% 18%;
+    --popover-foreground: 213 31% 91%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Vibrant accent colors */
+    --primary: 142 76% 36%;
+    --primary-foreground: 210 11% 15%;
+    --primary-glow: 142 76% 50%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217 19% 27%;
+    --secondary-foreground: 213 31% 91%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 217 19% 22%;
+    --muted-foreground: 215 15% 65%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 142 76% 36%;
+    --accent-foreground: 210 11% 15%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Modern borders and inputs */
+    --border: 217 19% 27%;
+    --input: 217 19% 22%;
+    --ring: 142 76% 36%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
-    --sidebar-background: 0 0% 98%;
+    /* Code editor specific colors */
+    --code-bg: 217 19% 12%;
+    --code-border: 217 19% 24%;
+    --syntax-comment: 215 15% 55%;
+    --syntax-keyword: 142 76% 50%;
+    --syntax-string: 54 100% 68%;
+    --syntax-number: 346 100% 68%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Gradients for modern UI */
+    --gradient-primary: linear-gradient(135deg, hsl(142 76% 36%), hsl(142 76% 50%));
+    --gradient-card: linear-gradient(145deg, hsl(217 19% 18%), hsl(217 19% 22%));
+    
+    /* Shadows with glow effects */
+    --shadow-glow: 0 0 20px hsl(142 76% 36% / 0.3);
+    --shadow-card: 0 8px 32px hsl(210 11% 4% / 0.5);
+    
+    /* Animation variables */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .dark {
@@ -101,5 +106,40 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  /* Code Editor Styles */
+  .code-editor {
+    @apply bg-[hsl(var(--code-bg))] border-[hsl(var(--code-border))] rounded-lg p-4 font-mono text-sm leading-relaxed;
+    box-shadow: var(--shadow-card);
+    transition: var(--transition-smooth);
+  }
+  
+  .code-editor:focus-within {
+    @apply ring-2 ring-primary/50;
+    box-shadow: var(--shadow-glow), var(--shadow-card);
+  }
+  
+  .preview-iframe {
+    @apply bg-white rounded-lg;
+    box-shadow: var(--shadow-card);
+  }
+  
+  .glow-button {
+    background: var(--gradient-primary);
+    box-shadow: var(--shadow-glow);
+    transition: var(--transition-smooth);
+  }
+  
+  .glow-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 30px hsl(142 76% 36% / 0.5), var(--shadow-card);
+  }
+  
+  .card-gradient {
+    background: var(--gradient-card);
+    box-shadow: var(--shadow-card);
   }
 }
