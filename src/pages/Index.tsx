@@ -1,13 +1,103 @@
 import { useState } from 'react';
 import { CodeEditor } from '@/components/CodeEditor';
 import { PreviewPanel } from '@/components/PreviewPanel';
-import { Button } from '@/components/ui/button';
-import { Code2, Palette, Zap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Code2, Palette, Zap } from 'lucide-react';
 
 const Index = () => {
-  const [html, setHtml] = useState('');
-  const [css, setCss] = useState('');
+  // Initial state moved to the parent component
+  const [html, setHtml] = useState(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Creation</title>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to Your HTML/CSS Playground</h1>
+        <p>Start editing the code to see your creation come to life!</p>
+        <div class="card">
+            <h2>Beautiful Card Component</h2>
+            <p>This is a sample card with modern styling.</p>
+            <button class="btn">Click Me</button>
+        </div>
+    </div>
+</body>
+</html>`);
+
+  const [css, setCss] = useState(`/* Modern CSS Styles */
+body {
+    margin: 0;
+    padding: 20px;
+    font-family: 'Arial', sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    color: #333;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+h1 {
+    color: white;
+    text-align: center;
+    font-size: 2.5rem;
+    margin-bottom: 20px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+p {
+    color: white;
+    text-align: center;
+    font-size: 1.2rem;
+    margin-bottom: 30px;
+}
+
+.card {
+    background: white;
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    margin: 20px 0;
+    transform: translateY(0);
+    transition: transform 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+}
+
+.card h2 {
+    color: #4a5568;
+    margin-bottom: 15px;
+}
+
+.card p {
+    color: #718096;
+    text-align: left;
+    margin-bottom: 20px;
+}
+
+.btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}`);
+
   const { toast } = useToast();
 
   const handleCodeChange = (newHtml: string, newCss: string) => {
@@ -16,28 +106,38 @@ const Index = () => {
   };
 
   const handleDownload = () => {
-    // Create a complete HTML file with embedded CSS
-    const fullHtml = html.includes('<style>') || html.includes('<link') 
-      ? html 
-      : html.replace(
-          '<head>',
-          `<head>
-            <style>${css}</style>`
-        );
+    let downloadableHtml = html;
 
-    // Create and download the file
-    const blob = new Blob([fullHtml], { type: 'text/html' });
+    // If the HTML input is a fragment (lacks a <head>), wrap it in a full document structure.
+    if (!/<\/head>/i.test(html)) {
+      downloadableHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Downloaded Creation</title>
+</head>
+<body>
+  ${html}
+</body>
+</html>`;
+    }
+
+    // Reliably inject the CSS just before the closing </head> tag.
+    const finalHtml = downloadableHtml.replace(/<\/head>/i, `<style>${css}</style></head>`);
+
+    const blob = new Blob([finalHtml], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'my-webpage.html';
+    a.download = 'index.html';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
     toast({
-      title: "Download successful!",
+      title: "Download Started!",
       description: "Your HTML file has been downloaded with embedded CSS.",
     });
   };
@@ -82,7 +182,9 @@ const Index = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
           {/* Code Editor Panel */}
           <div className="animate-fade-in">
-            <CodeEditor 
+            <CodeEditor
+              initialHtml={html}
+              initialCss={css}
               onCodeChange={handleCodeChange}
               onDownload={handleDownload}
             />
@@ -90,23 +192,13 @@ const Index = () => {
 
           {/* Preview Panel */}
           <div className="animate-slide-in-right">
-            <PreviewPanel 
+            <PreviewPanel
               html={html}
               css={css}
             />
           </div>
         </div>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-border bg-card/30 backdrop-blur-sm">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <p>Built with modern web technologies</p>
-            <p>Real-time HTML/CSS processing</p>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 };
